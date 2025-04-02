@@ -3,6 +3,8 @@ import numpy as np
 import tensorflow as tf
 import os
 import logging
+import time
+import gc
 
 logger = logging.getLogger('deepfake-detector')
 
@@ -53,6 +55,7 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
     Handle videos of any dimension with optimized memory usage
     """
     try:
+        start_time = time.time()
         if not os.path.exists(video_path):
             logger.error(f"Video file does not exist: {video_path}")
             return None
@@ -79,19 +82,27 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
         frames = np.zeros((len(frame_indices), target_size[0], target_size[1], 3), dtype=np.float32)
         
         for i, frame_index in enumerate(frame_indices):
+            frame_start = time.time()
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
             ret, frame = cap.read()
             if not ret:
                 continue
                 
-            # Process frame
+            # Process frame - use smaller intermediate size for faster processing
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w = frame.shape[:2]
+            if h > 720 or w > 720:
+                intermediate_size = (min(720, w), min(720, h))
+                frame = cv2.resize(frame, intermediate_size)
             frame = cv2.resize(frame, target_size)
             frames[i] = frame / 255.0
             
-            # Log progress for long videos
-            if i % 5 == 0:
-                logger.info(f"Processed {i+1}/{len(frame_indices)} frames")
+            frame_time = time.time() - frame_start
+            logger.info(f"Frame {i+1}/{len(frame_indices)} processed in {frame_time:.2f}s")
+            
+            # Force garbage collection every few frames
+            if i % 3 == 0:
+                gc.collect()
         
         cap.release()
         
@@ -99,7 +110,8 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
             logger.error("No frames could be extracted from the video")
             return None
             
-        logger.info(f"Extracted {len(frames)} frames for analysis")
+        total_time = time.time() - start_time
+        logger.info(f"Extracted {len(frames)} frames in {total_time:.2f}s")
         return frames
         
     except Exception as e:
@@ -116,16 +128,32 @@ def predict_frames(model, frames, batch_size=4):
         if model is None:
             return None
             
+        start_time = time.time()
+        logger.info(f"Starting predictions on {len(frames)} frames with batch size {batch_size}")
+        
         # Process frames in batches
         predictions = []
         for i in range(0, len(frames), batch_size):
+            batch_start = time.time()
             batch = frames[i:i+batch_size]
+            
+            # Clear GPU memory if available
+            if tf.config.list_physical_devices('GPU'):
+                tf.keras.backend.clear_session()
+            
             preds = model.predict(batch, verbose=0)
             predictions.extend(preds.flatten())
             
+            batch_time = time.time() - batch_start
+            logger.info(f"Batch {i//batch_size + 1} processed in {batch_time:.2f}s")
+            
+            # Force garbage collection after each batch
+            gc.collect()
+            
         # Average the predictions
         final_prediction = np.mean(predictions)
-        logger.info(f"Final prediction value: {final_prediction}")
+        total_time = time.time() - start_time
+        logger.info(f"Predictions completed in {total_time:.2f}s. Final prediction value: {final_prediction}")
         return final_prediction
         
     except Exception as e:
