@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import random
 import logging
+import gc
 from utils import preprocess_video, load_model, create_dummy_model, predict_frames
 
 # Configure logging
@@ -32,6 +33,15 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'webm', 'mkv'}
 # Create upload folder if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Configure Tensorflow to use memory growth
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        logger.error(f"GPU memory growth configuration failed: {e}")
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -55,7 +65,7 @@ try:
 except Exception as e:
     logger.error(f"Error during model initialization: {e}")
     import traceback
-    traceback.print_exc()
+    logger.error(traceback.format_exc())
 
 @app.route('/')
 def index():
@@ -68,9 +78,21 @@ def serve_static(path):
 @app.route('/health')
 def health_check():
     """Health check endpoint for monitoring"""
+    memory_info = {}
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_info = {
+            'memory_percent': process.memory_percent(),
+            'memory_info': str(process.memory_info())
+        }
+    except:
+        pass
+
     status = {
         'status': 'healthy',
-        'model_loaded': model is not None
+        'model_loaded': model is not None,
+        'memory_info': memory_info
     }
     return jsonify(status)
 
@@ -120,6 +142,10 @@ def detect_deepfake():
             if os.path.exists(filepath):
                 os.remove(filepath)
             
+            # Clear memory
+            del processed_frames
+            gc.collect()
+            
             result = {
                 'prediction': 'FAKE' if confidence > 0.5 else 'REAL',
                 'confidence': round(float(confidence) * 100, 2)
@@ -136,6 +162,9 @@ def detect_deepfake():
             # Clean up in case of error
             if filepath and os.path.exists(filepath):
                 os.remove(filepath)
+            
+            # Clear memory
+            gc.collect()
                 
             return jsonify({'error': 'An error occurred while processing the video. Please try again.'}), 500
             
@@ -143,6 +172,10 @@ def detect_deepfake():
         logger.error(f"Unexpected error in detect_deepfake: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        
+        # Clear memory
+        gc.collect()
+        
         return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 if __name__ == '__main__':
