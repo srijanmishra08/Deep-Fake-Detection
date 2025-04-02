@@ -3,16 +3,18 @@ services:
     name: deepfake-detection
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --timeout 300 --workers 1 --threads 4 --worker-class gthread --worker-tmp-dir /dev/shm
+    startCommand: gunicorn app:app --timeout 600 --workers 1 --threads 4 --worker-class gthread --worker-tmp-dir /dev/shm --max-requests 1000 --max-requests-jitter 50 --keep-alive 5
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
       - key: MAX_CONTENT_LENGTH
         value: 67108864
       - key: GUNICORN_TIMEOUT
-        value: 300
+        value: 600
       - key: WEB_CONCURRENCY
         value: 1
+      - key: PYTHONUNBUFFERED
+        value: "true"
     plan: free
     healthCheckPath: /health
     disk:
