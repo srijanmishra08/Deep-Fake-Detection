@@ -1,0 +1,37 @@
+2025-04-02 15:04:55,335 - tensorflow - WARNING - From C:\Users\srija\Desktop\project\Deep-Fake-Detection\.venv\Lib\site-packages\keras\src\backend\tensorflow\core.py:219: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+2025-04-02 15:04:55,356 - absl - WARNING - Compiled the loaded model, but the compiled metrics have yet to be built. `model.compile_metrics` will be empty until you train or evaluate the model.
+2025-04-02 15:04:55,362 - deepfake-detector - INFO - Model initialization completed successfully
+2025-04-02 15:04:55,376 - werkzeug - WARNING -  * Running on all addresses.
+   WARNING: This is a development server. Do not use it in a production deployment.
+2025-04-02 15:04:55,378 - werkzeug - INFO -  * Running on http://192.168.29.84:5000/ (Press CTRL+C to quit)
+2025-04-02 15:05:40,727 - tensorflow - WARNING - From C:\Users\srija\Desktop\project\Deep-Fake-Detection\.venv\Lib\site-packages\keras\src\backend\tensorflow\core.py:219: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+2025-04-02 15:05:40,759 - absl - WARNING - Compiled the loaded model, but the compiled metrics have yet to be built. `model.compile_metrics` will be empty until you train or evaluate the model.
+2025-04-02 15:05:40,767 - deepfake-detector - INFO - Model initialization completed successfully
+2025-04-02 15:05:40,795 - werkzeug - WARNING -  * Running on all addresses.
+   WARNING: This is a development server. Do not use it in a production deployment.
+2025-04-02 15:05:40,796 - werkzeug - INFO -  * Running on http://192.168.29.84:5000/ (Press CTRL+C to quit)
+2025-04-02 15:06:11,284 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:06:11] "GET / HTTP/1.1" 200 -
+2025-04-02 15:06:11,555 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:06:11] "GET /static/styles.css HTTP/1.1" 200 -
+2025-04-02 15:06:11,704 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:06:11] "GET /static/script.js HTTP/1.1" 200 -
+2025-04-02 15:06:12,042 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:06:12] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-04-02 15:06:17,933 - deepfake-detector - INFO - Video file saved: uploads\14058787-uhd_2732_1440_24fps.mp4
+2025-04-02 15:06:27,381 - deepfake-detector - WARNING - Prediction failed, using random prediction
+2025-04-02 15:06:27,384 - deepfake-detector - INFO - Prediction result: {'prediction': 'REAL', 'confidence': 43.3}
+2025-04-02 15:06:27,387 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:06:27] "POST /detect HTTP/1.1" 200 -
+2025-04-02 15:15:46,320 - tensorflow - WARNING - From C:\Users\srija\Desktop\project\Deep-Fake-Detection\.venv\Lib\site-packages\keras\src\backend\tensorflow\core.py:219: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+2025-04-02 15:15:46,370 - absl - WARNING - Compiled the loaded model, but the compiled metrics have yet to be built. `model.compile_metrics` will be empty until you train or evaluate the model.
+2025-04-02 15:15:46,375 - deepfake-detector - INFO - Model initialization completed successfully
+2025-04-02 15:15:46,406 - werkzeug - WARNING -  * Running on all addresses.
+   WARNING: This is a development server. Do not use it in a production deployment.
+2025-04-02 15:15:46,407 - werkzeug - INFO -  * Running on http://192.168.29.84:5000/ (Press CTRL+C to quit)
+2025-04-02 15:15:58,878 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:15:58] "GET / HTTP/1.1" 200 -
+2025-04-02 15:15:59,411 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:15:59] "[36mGET /static/styles.css HTTP/1.1[0m" 304 -
+2025-04-02 15:15:59,689 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:15:59] "[36mGET /static/script.js HTTP/1.1[0m" 304 -
+2025-04-02 15:16:01,370 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:16:01] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-04-02 15:16:16,294 - deepfake-detector - INFO - Video file saved: uploads\input.mp4
+2025-04-02 15:16:18,445 - deepfake-detector - WARNING - Prediction failed, using random prediction
+2025-04-02 15:16:18,449 - deepfake-detector - INFO - Prediction result: {'prediction': 'FAKE', 'confidence': 66.09}
+2025-04-02 15:16:18,450 - werkzeug - INFO - 192.168.29.84 - - [02/Apr/2025 15:16:18] "POST /detect HTTP/1.1" 200 -
