@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: deepfake-detection
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 300 --workers 2
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: MAX_CONTENT_LENGTH
+        value: 67108864
+    plan: free
+    healthCheckPath: /health
+    disk:
+      name: uploads
+      mountPath: /uploads
+      sizeGB: 1 

@@ -70,18 +70,23 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/detect', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                timeout: 300000 // 5 minutes timeout
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
-                displayResults(result);
-            } else {
-                throw new Error(result.error || 'Error processing video');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({
+                    error: `HTTP error! status: ${response.status}`
+                }));
+                throw new Error(errorData.error || 'Error processing video');
             }
+
+            const result = await response.json();
+            displayResults(result);
         } catch (error) {
-            alert(error.message);
+            console.error('Error:', error);
+            alert(error.message || 'An error occurred while processing the video. Please try again.');
+            resultSection.classList.add('d-none');
         } finally {
             loadingSection.classList.add('d-none');
             uploadBtn.disabled = false;
@@ -90,6 +95,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Display results
     function displayResults(result) {
+        if (!result || !result.prediction || !result.confidence) {
+            throw new Error('Invalid response format from server');
+        }
+
         resultSection.classList.remove('d-none');
         
         // Update prediction badge

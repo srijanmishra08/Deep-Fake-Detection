@@ -26,6 +26,7 @@ app = Flask(__name__,
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # 64MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['TIMEOUT'] = 300  # 5 minutes timeout
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'webm', 'mkv'}
 
 # Create upload folder if it doesn't exist
@@ -75,67 +76,74 @@ def health_check():
 
 @app.route('/detect', methods=['POST'])
 def detect_deepfake():
-    if 'video' not in request.files:
-        logger.warning("No video file provided in request")
-        return jsonify({'error': 'No video file provided'}), 400
-    
-    file = request.files['video']
-    if file.filename == '':
-        logger.warning("Empty filename provided")
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if not allowed_file(file.filename):
-        logger.warning(f"File type not allowed: {file.filename}")
-        return jsonify({'error': 'File type not allowed. Supported formats: MP4, AVI, MOV, WEBM, MKV'}), 400
-    
-    filepath = None
     try:
-        # Save the uploaded file temporarily
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        logger.info(f"Video file saved: {filepath}")
+        if 'video' not in request.files:
+            logger.warning("No video file provided in request")
+            return jsonify({'error': 'No video file provided'}), 400
         
-        # Process the video
-        processed_frames = preprocess_video(filepath)
+        file = request.files['video']
+        if file.filename == '':
+            logger.warning("Empty filename provided")
+            return jsonify({'error': 'No selected file'}), 400
         
-        if processed_frames is None:
-            logger.error("Error processing video: No frames extracted")
-            return jsonify({'error': 'Error processing video. Please ensure it\'s a valid video file.'}), 500
+        if not allowed_file(file.filename):
+            logger.warning(f"File type not allowed: {file.filename}")
+            return jsonify({'error': 'File type not allowed. Supported formats: MP4, AVI, MOV, WEBM, MKV'}), 400
         
-        # Make prediction using the model or fallback to a random prediction
-        if model is not None:
-            confidence = predict_frames(model, processed_frames)
-            if confidence is None:
-                logger.warning("Prediction failed, using random prediction")
-                confidence = random.uniform(0.3, 0.7)
-        else:
-            # Fallback to random prediction if model is not available
-            logger.warning("Model not available, using random prediction")
-            confidence = random.uniform(0.3, 0.7)
-        
-        # Clean up
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        
-        result = {
-            'prediction': 'FAKE' if confidence > 0.5 else 'REAL',
-            'confidence': round(float(confidence) * 100, 2)
-        }
-        
-        logger.info(f"Prediction result: {result}")
-        return jsonify(result)
-    
-    except Exception as e:
-        logger.error(f"Error during detection: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Clean up in case of error
-        if filepath and os.path.exists(filepath):
-            os.remove(filepath)
+        filepath = None
+        try:
+            # Save the uploaded file temporarily
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            logger.info(f"Video file saved: {filepath}")
             
-        return jsonify({'error': str(e)}), 500
+            # Process the video
+            processed_frames = preprocess_video(filepath)
+            
+            if processed_frames is None or len(processed_frames) == 0:
+                logger.error("Error processing video: No frames extracted")
+                return jsonify({'error': 'Error processing video. Please ensure it\'s a valid video file.'}), 500
+            
+            # Make prediction using the model or fallback to a random prediction
+            if model is not None:
+                confidence = predict_frames(model, processed_frames)
+                if confidence is None:
+                    logger.warning("Prediction failed, using random prediction")
+                    confidence = random.uniform(0.3, 0.7)
+            else:
+                # Fallback to random prediction if model is not available
+                logger.warning("Model not available, using random prediction")
+                confidence = random.uniform(0.3, 0.7)
+            
+            # Clean up
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            
+            result = {
+                'prediction': 'FAKE' if confidence > 0.5 else 'REAL',
+                'confidence': round(float(confidence) * 100, 2)
+            }
+            
+            logger.info(f"Prediction result: {result}")
+            return jsonify(result)
+        
+        except Exception as e:
+            logger.error(f"Error during detection: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            # Clean up in case of error
+            if filepath and os.path.exists(filepath):
+                os.remove(filepath)
+                
+            return jsonify({'error': 'An error occurred while processing the video. Please try again.'}), 500
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in detect_deepfake: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 if __name__ == '__main__':
     # Use Gunicorn for production deployment
