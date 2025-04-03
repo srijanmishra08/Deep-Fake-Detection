@@ -13,7 +13,7 @@ _model_cache = None
 
 def load_model(model_path):
     """
-    Load the pre-trained model with caching
+    Load the pre-trained model with caching and optimization
     """
     global _model_cache
     try:
@@ -31,26 +31,35 @@ def load_model(model_path):
             # Limit GPU memory growth
             for gpu in tf.config.experimental.list_physical_devices('GPU'):
                 tf.config.experimental.set_memory_growth(gpu, True)
-                # Limit memory to 1GB
+                # Limit memory to 512MB
                 try:
                     tf.config.set_logical_device_configuration(
                         gpu,
-                        [tf.config.LogicalDeviceConfiguration(memory_limit=1024)]
+                        [tf.config.LogicalDeviceConfiguration(memory_limit=512)]
                     )
                 except:
                     pass
         
-        model = tf.keras.models.load_model(model_path)
-        # Optimize the model for inference
-        model = tf.keras.models.clone_model(model)
-        model.set_weights(model.get_weights())
-        _model_cache = model
-        
-        # Enable mixed precision for faster inference
+        # Enable mixed precision globally
         tf.keras.mixed_precision.set_global_policy('mixed_float16')
         
-        logger.info("Model loaded and optimized successfully")
+        # Load and optimize model
+        model = tf.keras.models.load_model(model_path)
+        model = tf.keras.models.clone_model(model)
+        model.set_weights(model.get_weights())
+        
+        # Convert model to float16 for inference
+        model.compile(
+            optimizer='adam',
+            loss='binary_crossentropy',
+            metrics=['accuracy'],
+            run_eagerly=False  # Ensure graph mode for better performance
+        )
+        
+        _model_cache = model
+        logger.info("Model loaded and optimized for inference")
         return model
+        
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
         return None
@@ -170,36 +179,57 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=6):
 
 def predict_frames(model, frames, batch_size=2):
     """
-    Make predictions on video frames using the model with aggressive optimization
+    Make predictions on video frames using the model with extreme optimization
     """
     try:
         if model is None:
             return None
             
         start_time = time.time()
-        logger.info(f"Starting predictions on {len(frames)} frames with batch size {batch_size}")
+        logger.info(f"Starting predictions on {len(frames)} frames")
         
-        # Process frames in smaller batches to avoid memory issues
-        predictions = []
-        for i in range(0, len(frames), batch_size):
-            batch = frames[i:i+batch_size]
-            batch_tensor = tf.constant(batch, dtype=tf.float16)  # Use float16 for faster processing
-            preds = model.predict(batch_tensor, verbose=0)
-            predictions.extend(preds.flatten())
+        try:
+            # Convert entire input to float16 for memory efficiency
+            frames = frames.astype('float16')
             
-            if time.time() - start_time > 25:  # Emergency timeout
-                logger.error("Prediction took too long, aborting")
-                return None
+            # Make a single prediction call for all frames
+            logger.info("Starting batch prediction")
+            predictions = model.predict(frames, batch_size=len(frames), verbose=0)
+            predictions = predictions.flatten()
+            
+            # Calculate final prediction
+            final_prediction = float(np.mean(predictions))
+            
+            total_time = time.time() - start_time
+            logger.info(f"Predictions completed in {total_time:.2f}s. Final prediction: {final_prediction:.4f}")
+            return final_prediction
+            
+        except tf.errors.ResourceExhaustedError:
+            # If we run out of memory, try one frame at a time
+            logger.warning("Batch prediction failed, trying one frame at a time")
+            predictions = []
+            
+            for i, frame in enumerate(frames):
+                if time.time() - start_time > 20:  # Reduced timeout
+                    logger.error("Prediction took too long, aborting")
+                    return None
+                    
+                # Process single frame
+                frame_tensor = tf.constant(frame[np.newaxis, ...], dtype=tf.float16)
+                pred = model.predict(frame_tensor, verbose=0)
+                predictions.append(float(pred[0]))
                 
-            gc.collect()  # Clear memory after each batch
-        
-        # Calculate final prediction
-        final_prediction = float(np.mean(predictions))
-        
-        total_time = time.time() - start_time
-        logger.info(f"Predictions completed in {total_time:.2f}s. Final prediction value: {final_prediction:.4f}")
-        return final_prediction
-        
+                logger.info(f"Frame {i+1}/{len(frames)} prediction complete")
+                
+                # Clear memory
+                tf.keras.backend.clear_session()
+                gc.collect()
+            
+            final_prediction = float(np.mean(predictions))
+            total_time = time.time() - start_time
+            logger.info(f"Single-frame predictions completed in {total_time:.2f}s. Final prediction: {final_prediction:.4f}")
+            return final_prediction
+            
     except Exception as e:
         logger.error(f"Error during prediction: {str(e)}")
         import traceback
