@@ -10,14 +10,9 @@ A web-based application for detecting deepfake videos using machine learning.
 - API endpoint for programmatic access
 - Containerized deployment for easy setup
 
-## System Requirements
-
-- Python 3.9+ (3.12 also supported)
-- Docker (for containerized deployment)
-- 4GB+ RAM recommended for video processing
-
 ## Installation
-
+check it out.
+https://deep-fake-detection-40qx.onrender.com
 ### Option 1: Local Installation
 
 1. Clone the repository:
