@@ -8,17 +8,40 @@ import gc
 
 logger = logging.getLogger('deepfake-detector')
 
+# Global variable to cache the model
+_model_cache = None
+
 def load_model(model_path):
     """
-    Load the pre-trained model
+    Load the pre-trained model with caching
     """
+    global _model_cache
     try:
-        logger.info(f"Attempting to load model from {model_path}")
+        if _model_cache is not None:
+            logger.info("Using cached model")
+            return _model_cache
+            
+        logger.info(f"Loading model from {model_path}")
+        
+        # Configure TensorFlow for better performance
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        
+        if tf.config.list_physical_devices('GPU'):
+            # Limit GPU memory growth
+            for gpu in tf.config.experimental.list_physical_devices('GPU'):
+                tf.config.experimental.set_memory_growth(gpu, True)
+        
         model = tf.keras.models.load_model(model_path)
-        logger.info("Model loaded successfully.")
+        # Optimize the model for inference
+        model = tf.keras.models.clone_model(model)
+        model.set_weights(model.get_weights())
+        _model_cache = model
+        
+        logger.info("Model loaded and optimized successfully")
         return model
     except Exception as e:
-        logger.error(f"Error loading model from {model_path}: {e}")
+        logger.error(f"Error loading model: {str(e)}")
         return None
 
 def create_dummy_model(input_shape=(None, 128, 128, 3)):
@@ -49,10 +72,9 @@ def create_dummy_model(input_shape=(None, 128, 128, 3)):
     logger.info("Dummy model created successfully")
     return model
 
-def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
+def preprocess_video(video_path, target_size=(128, 128), max_frames=8):
     """
-    Process video file and extract frames for prediction
-    Handle videos of any dimension with optimized memory usage
+    Process video file and extract frames for prediction with optimized memory usage
     """
     try:
         start_time = time.time()
@@ -81,28 +103,33 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
         # Pre-allocate numpy array for frames
         frames = np.zeros((len(frame_indices), target_size[0], target_size[1], 3), dtype=np.float32)
         
-        for i, frame_index in enumerate(frame_indices):
-            frame_start = time.time()
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-            ret, frame = cap.read()
-            if not ret:
-                continue
+        # Process frames in chunks to reduce memory usage
+        chunk_size = 2
+        for chunk_start in range(0, len(frame_indices), chunk_size):
+            chunk_end = min(chunk_start + chunk_size, len(frame_indices))
+            chunk_indices = frame_indices[chunk_start:chunk_end]
+            
+            for i, frame_index in enumerate(chunk_indices, start=chunk_start):
+                frame_start = time.time()
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+                    
+                # Process frame with minimal operations
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w = frame.shape[:2]
+                if h > 720 or w > 720:
+                    scale = 720 / max(h, w)
+                    frame = cv2.resize(frame, None, fx=scale, fy=scale)
+                frame = cv2.resize(frame, target_size)
+                frames[i] = frame / 255.0
                 
-            # Process frame - use smaller intermediate size for faster processing
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w = frame.shape[:2]
-            if h > 720 or w > 720:
-                intermediate_size = (min(720, w), min(720, h))
-                frame = cv2.resize(frame, intermediate_size)
-            frame = cv2.resize(frame, target_size)
-            frames[i] = frame / 255.0
+                frame_time = time.time() - frame_start
+                logger.info(f"Frame {i+1}/{len(frame_indices)} processed in {frame_time:.2f}s")
             
-            frame_time = time.time() - frame_start
-            logger.info(f"Frame {i+1}/{len(frame_indices)} processed in {frame_time:.2f}s")
-            
-            # Force garbage collection every few frames
-            if i % 3 == 0:
-                gc.collect()
+            # Clear memory after each chunk
+            gc.collect()
         
         cap.release()
         
@@ -122,7 +149,7 @@ def preprocess_video(video_path, target_size=(128, 128), max_frames=10):
 
 def predict_frames(model, frames, batch_size=4):
     """
-    Make predictions on video frames using the model with batching
+    Make predictions on video frames using the model with optimized batching
     """
     try:
         if model is None:
@@ -131,29 +158,18 @@ def predict_frames(model, frames, batch_size=4):
         start_time = time.time()
         logger.info(f"Starting predictions on {len(frames)} frames with batch size {batch_size}")
         
-        # Process frames in batches
-        predictions = []
-        for i in range(0, len(frames), batch_size):
-            batch_start = time.time()
-            batch = frames[i:i+batch_size]
-            
-            # Clear GPU memory if available
-            if tf.config.list_physical_devices('GPU'):
-                tf.keras.backend.clear_session()
-            
-            preds = model.predict(batch, verbose=0)
-            predictions.extend(preds.flatten())
-            
-            batch_time = time.time() - batch_start
-            logger.info(f"Batch {i//batch_size + 1} processed in {batch_time:.2f}s")
-            
-            # Force garbage collection after each batch
-            gc.collect()
-            
-        # Average the predictions
-        final_prediction = np.mean(predictions)
+        # Convert frames to TensorFlow constant for better performance
+        frames_tensor = tf.constant(frames)
+        
+        # Make a single prediction call for all frames
+        predictions = model.predict(frames_tensor, batch_size=batch_size, verbose=0)
+        predictions = predictions.flatten()
+        
+        # Calculate final prediction
+        final_prediction = float(np.mean(predictions))
+        
         total_time = time.time() - start_time
-        logger.info(f"Predictions completed in {total_time:.2f}s. Final prediction value: {final_prediction}")
+        logger.info(f"Predictions completed in {total_time:.2f}s. Final prediction value: {final_prediction:.4f}")
         return final_prediction
         
     except Exception as e:
